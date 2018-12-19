@@ -1,8 +1,6 @@
 import tensorflow as tf
 import numpy as np
 
-tf.set_random_seed(777)
-
 class TextCNN:
 	def __init__(self, sess, window_size, filters, num_classes, pad_idx, lr,
 					voca_size, embedding_size, embedding_mode='rand', word_embedding=None):
@@ -20,7 +18,7 @@ class TextCNN:
 
 		with tf.name_scope("placeholder"):
 			self.idx_input = tf.placeholder(tf.int32, [None, None], name="idx_input")
-			self.target = tf.placeholder(tf.int32, [None, self.num_classes], name="target")
+			self.target = tf.placeholder(tf.int32, [None], name="target")
 			self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
 
@@ -59,34 +57,54 @@ class TextCNN:
 
 
 		with tf.name_scope('train'): 
+			target_one_hot = tf.one_hot(
+						self.target, # [N]
+						depth=self.num_classes,
+						on_value = 1., # tf.float32
+						off_value = 0., # tf.float32
+					) # [N, self.num_classes]
 			# calc train_cost
-			self.train_cost = tf.reduce_mean(
-						tf.nn.softmax_cross_entropy_with_logits(labels = self.target, logits = self.pred)
+			self.cost = tf.reduce_mean(
+						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
 					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
-			optimizer = tf.train.AdamOptimizer(self.lr)
-			self.minimize = optimizer.minimize(self.train_cost)
+
+			#optimizer = tf.train.AdadeltaOptimizer(self.lr)
+			#self.minimize = optimizer.minimize(self.cost)
+
+			clip_norm = 3.0
+			optimizer = tf.train.AdadeltaOptimizer(self.lr)
+			grads_and_vars = optimizer.compute_gradients(self.cost)
+			#https://www.tensorflow.org/api_docs/python/tf/clip_by_norm
+			clip_grads_and_vars = [(tf.clip_by_norm(gv[0], clip_norm), gv[1]) for gv in grads_and_vars]
+			self.minimize = optimizer.apply_gradients(clip_grads_and_vars)
+
+
+		with tf.name_scope('metric'):
+			self.pred_argmax = tf.argmax(self.pred, 1, output_type=tf.int32) # [N]	
+			self.correct_check_beform_sum = tf.equal( self.pred_argmax, self.target )
+			self.correct_check = tf.reduce_sum(tf.cast(self.correct_check_beform_sum, tf.int32 ))
 
 		self.sess.run(tf.global_variables_initializer())
 
 
 	def rand_embedding_table(self, voca_size, pad_idx, embedding_size=300): 
 		zero = tf.zeros([1, embedding_size], dtype=tf.float32) # for padding 
-		embedding_table = tf.Variable(tf.random_normal([voca_size-1, embedding_size])) 
+		embedding_table = tf.Variable(tf.random_uniform([voca_size-1, embedding_size], -1, 1)) 
 		front, end = tf.split(embedding_table, [pad_idx, voca_size-1-pad_idx])
 		embedding_table = tf.concat((front, zero, end), axis=0)
 		return embedding_table
 
 
+
 	def convolution(self, embedding, embedding_size, window_size, filters):
 		convolved_features = []
-		for window in window_size:
+		for i in range(len(window_size)):
 			convolved = tf.layers.conv2d(
 						inputs = embedding, 
-						filters = filters, 
-						kernel_size = [window, embedding_size], 
+						filters = filters[i], 
+						kernel_size = [window_size[i], embedding_size], 
 						strides=[1, 1], 
 						padding='VALID', 
-						#padding='SAME', 
 						activation=tf.nn.relu
 					) # [N, ?, 1, filters]
 			convolved_features.append(convolved) # [N, ?, 1, filters] 이 len(window_size) 만큼 존재.
@@ -94,6 +112,17 @@ class TextCNN:
 
 
 	def max_pooling(self, convolved_features):
+		pooled_features = []
+		for index, convolved in enumerate(convolved_features): # [N, ?, 1, self.filters]
+			max_pool = tf.layers.max_pooling2d(
+	  				  	convolved,
+					    [56-self.window_size[index]+1, 1],
+					    [1, 1]
+					) # [N, 1, 1, self.filters]
+			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
+		return pooled_features	
+   
+		'''
 		pooled_features = []
 		for convolved in convolved_features: # [N, ?, 1, self.filters]
 			max_pool = tf.reduce_max(
@@ -103,15 +132,20 @@ class TextCNN:
 					) # [N, 1, 1, self.filters]
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features
-
+		'''
 
 	def concat_and_flatten(self, pooled_features):
 		concat = tf.concat(pooled_features, axis=-1) # [N, 1, 1, self.filters*len(self.window_size)]
-		concat_and_flatten_features = tf.layers.flatten(concat) # [N, self.filters*len(self.window_size)]
+		#concat_and_flatten_features = tf.layers.flatten(concat) # [N, self.filters*len(self.window_size)]
+		concat_and_flatten_features = tf.reshape(concat, [-1, np.sum(self.filters)]) # [N, self.filters*len(self.window_size)]
+		
+		#print(concat_and_flatten_features)
 		return concat_and_flatten_features
 
 
 	def dropout_and_dense(self, concat_and_flatten_features, num_classes, keep_prob):
 		dropout = tf.nn.dropout(concat_and_flatten_features, keep_prob = keep_prob)
+		#dropout = tf.contrib.layers.layer_norm(dropout,	begin_norm_axis=1)
+		
 		dense = tf.layers.dense(dropout, units = num_classes, activation=None)
 		return dense
