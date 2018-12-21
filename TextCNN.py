@@ -68,16 +68,17 @@ class TextCNN:
 						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
 					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
 
-			#optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			#self.minimize = optimizer.minimize(self.cost)
+			optimizer = tf.train.AdadeltaOptimizer(self.lr)
+			self.minimize = optimizer.minimize(self.cost)
 
+			'''
 			clip_norm = 3.0
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
 			grads_and_vars = optimizer.compute_gradients(self.cost)
 			#https://www.tensorflow.org/api_docs/python/tf/clip_by_norm
 			clip_grads_and_vars = [(tf.clip_by_norm(gv[0], clip_norm), gv[1]) for gv in grads_and_vars]
 			self.minimize = optimizer.apply_gradients(clip_grads_and_vars)
-
+			'''
 
 		with tf.name_scope('metric'):
 			self.pred_argmax = tf.argmax(self.pred, 1, output_type=tf.int32) # [N]	
@@ -112,17 +113,17 @@ class TextCNN:
 
 
 	def max_pooling(self, convolved_features):
+		'''
 		pooled_features = []
 		for index, convolved in enumerate(convolved_features): # [N, ?, 1, self.filters]
 			max_pool = tf.layers.max_pooling2d(
 	  				  	convolved,
-					    [56-self.window_size[index]+1, 1],
+					    [60-self.window_size[index]+1, 1],
 					    [1, 1]
 					) # [N, 1, 1, self.filters]
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features	
-   
-		'''
+   		'''
 		pooled_features = []
 		for convolved in convolved_features: # [N, ?, 1, self.filters]
 			max_pool = tf.reduce_max(
@@ -132,7 +133,6 @@ class TextCNN:
 					) # [N, 1, 1, self.filters]
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features
-		'''
 
 	def concat_and_flatten(self, pooled_features):
 		concat = tf.concat(pooled_features, axis=-1) # [N, 1, 1, self.filters*len(self.window_size)]
