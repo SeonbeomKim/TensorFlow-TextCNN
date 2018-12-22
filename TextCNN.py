@@ -20,6 +20,7 @@ class TextCNN:
 			self.idx_input = tf.placeholder(tf.int32, [None, None], name="idx_input")
 			self.target = tf.placeholder(tf.int32, [None], name="target")
 			self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+			self.weight_scale = tf.placeholder(tf.float32, name="weight_scale")
 
 
 		with tf.name_scope("embedding_table"):
@@ -67,18 +68,17 @@ class TextCNN:
 			self.cost = tf.reduce_mean(
 						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
 					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
-
+			'''
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
 			self.minimize = optimizer.minimize(self.cost)
-
 			'''
+			
 			clip_norm = 3.0
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
 			grads_and_vars = optimizer.compute_gradients(self.cost)
 			#https://www.tensorflow.org/api_docs/python/tf/clip_by_norm
 			clip_grads_and_vars = [(tf.clip_by_norm(gv[0], clip_norm), gv[1]) for gv in grads_and_vars]
 			self.minimize = optimizer.apply_gradients(clip_grads_and_vars)
-			'''
 
 		with tf.name_scope('metric'):
 			self.pred_argmax = tf.argmax(self.pred, 1, output_type=tf.int32) # [N]	
@@ -146,6 +146,10 @@ class TextCNN:
 	def dropout_and_dense(self, concat_and_flatten_features, num_classes, keep_prob):
 		dropout = tf.nn.dropout(concat_and_flatten_features, keep_prob = keep_prob)
 		#dropout = tf.contrib.layers.layer_norm(dropout,	begin_norm_axis=1)
+		W = tf.get_variable('w2', shape = [np.sum(self.filters), num_classes], initializer=tf.contrib.layers.xavier_initializer())
+		bias = tf.Variable(tf.constant(0.0, shape = [num_classes]))
 		
-		dense = tf.layers.dense(dropout, units = num_classes, activation=None)
+		dense = tf.matmul(dropout, self.weight_scale*W) + bias
+		#dense = tf.nn.relu(tf.matmul(dropout, self.weight_scale*W) + bias)
+		#dense = tf.layers.dense(dropout, units = num_classes, activation=None)
 		return dense
