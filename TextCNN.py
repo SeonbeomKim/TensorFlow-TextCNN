@@ -54,7 +54,7 @@ class TextCNN:
 			self.convolved_features = self.convolution(self.embedding, self.embedding_size, self.window_size, self.filters)
 			self.pooled_features = self.max_pooling(self.convolved_features)
 			self.concat_and_flatten_features = self.concat_and_flatten(self.pooled_features)
-			self.pred = self.dropout_and_dense(self.concat_and_flatten_features, self.num_classes, self.keep_prob)
+			self.pred, l2_loss = self.dropout_and_dense(self.concat_and_flatten_features, self.num_classes, self.keep_prob)
 
 
 		with tf.name_scope('train'): 
@@ -68,17 +68,20 @@ class TextCNN:
 			self.cost = tf.reduce_mean(
 						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
 					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
-			'''
+			s = 3.0
+			l2_cost_scale = 0.01 
+			self.l2_cost = l2_cost_scale * ((l2_loss - 3.0)**2) # l2_loss를 3으로 고정시킴. 
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			self.minimize = optimizer.minimize(self.cost)
-			'''
+			self.minimize = optimizer.minimize(self.cost + self.l2_cost)
 			
+			'''
 			clip_norm = 3.0
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
 			grads_and_vars = optimizer.compute_gradients(self.cost)
 			#https://www.tensorflow.org/api_docs/python/tf/clip_by_norm
 			clip_grads_and_vars = [(tf.clip_by_norm(gv[0], clip_norm), gv[1]) for gv in grads_and_vars]
 			self.minimize = optimizer.apply_gradients(clip_grads_and_vars)
+			'''
 
 		with tf.name_scope('metric'):
 			self.pred_argmax = tf.argmax(self.pred, 1, output_type=tf.int32) # [N]	
@@ -150,6 +153,7 @@ class TextCNN:
 		bias = tf.Variable(tf.constant(0.0, shape = [num_classes]))
 		
 		dense = tf.matmul(dropout, self.weight_scale*W) + bias
+		l2_loss = tf.nn.l2_loss(W)
 		#dense = tf.nn.relu(tf.matmul(dropout, self.weight_scale*W) + bias)
 		#dense = tf.layers.dense(dropout, units = num_classes, activation=None)
-		return dense
+		return dense, l2_loss

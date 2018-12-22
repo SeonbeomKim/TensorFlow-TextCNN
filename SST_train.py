@@ -5,36 +5,36 @@ import numpy as np
 import os
 from tqdm import tqdm
 
-out_path = 'preprocess/'
 path_list = [
-		'stanfordSentimentTreebank/datasetSentences.txt', # validset에 Hey Arnold ! 가 2개 있음.
-		'stanfordSentimentTreebank/datasetSplit.txt',
-		'stanfordSentimentTreebank/sentiment_labels.txt',
-		'stanfordSentimentTreebank/dictionary.txt'
+		'SST_data_extraction-master/sst_train_sentences.csv', 
+		'SST_data_extraction-master/sst_train_phrases.csv',
+		'SST_data_extraction-master/sst_dev.csv',
+		'SST_data_extraction-master/sst_test.csv'
 	]
+
 data_type_dict = {'SST1':(True, 5), 'SST2':(False, 2)}
 data_type = ['SST1', 'SST2'][0]
+print(data_type)
 
-pr.split_dataset_to_txt(path_list, out_path) # make train, valid, test, phrase.txt
 dataset, word2idx, maximum_length = pr.get_dataset(
-		out_path, 
-		#is_phrase_tarin=True, 
-		False,
+		path_list, 
+		is_phrase_tarin=True, 
+		#False,
 		is_SST1=data_type_dict[data_type][0],
-		maximum_length_margin=5
+		max_length_margin=5
 	)
 
-tensorboard_path = './tensorboard/'
+tensorboard_path = data_type+'_tensorboard/'
 
 window_size = [3, 4, 5] 
 filters = [100, 100, 100] 
 num_classes = data_type_dict[data_type][1]
 pad_idx = word2idx['</p>']
-lr = 0.002
+lr = 0.02
 voca_size = len(word2idx)
-embedding_size = 512
+embedding_size = 300
 embedding_mode = 'rand'
-word_embedding = None
+word_embedding = None	
 batch_size = 50
 
 
@@ -58,6 +58,7 @@ def train(model, dataset):
 					model.idx_input:batch_source, 
 					model.target:batch_target, 
 					model.keep_prob:0.5,
+					model.weight_scale:1
 				}
 			)
 		acc += correct
@@ -82,6 +83,8 @@ def valid(model, dataset):
 					model.idx_input:batch_source, 
 					model.target:batch_target, 
 					model.keep_prob:1,
+					model.weight_scale:0.5 # train drop_out rate
+
 				}
 			)
 		loss += valid_loss
@@ -104,6 +107,7 @@ def test(model, dataset):
 					model.idx_input:batch_source, 
 					model.target:batch_target, 
 					model.keep_prob:1,
+					model.weight_scale:0.5 # train drop_out rate
 				}
 			)
 		#print(np.array(list(zip(pred_argmax, batch_target))))
