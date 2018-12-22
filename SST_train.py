@@ -21,7 +21,7 @@ dataset, word2idx, maximum_length = pr.get_dataset(
 		is_phrase_tarin=True, 
 		#False,
 		is_SST1=data_type_dict[data_type][0],
-		max_length_margin=5
+		max_length_margin=10
 	)
 
 tensorboard_path = data_type+'_tensorboard/'
@@ -30,13 +30,32 @@ window_size = [3, 4, 5]
 filters = [100, 100, 100] 
 num_classes = data_type_dict[data_type][1]
 pad_idx = word2idx['</p>']
-lr = 0.02
+lr = 0.001 * 10
 voca_size = len(word2idx)
 embedding_size = 300
 embedding_mode = 'rand'
 word_embedding = None	
 batch_size = 50
 
+
+def cost_weight_for_imbalanced_label(target):
+	#target: [1,2,1,0,2,2]
+
+	count = np.zeros(num_classes)
+	for i in target:
+		count[i] += 1
+	#count: [1, 2, 3]
+
+	weight = sum(count) / (count+0.00001) # avoid divide by zero
+	#weight: [6, 3, 2] 
+
+	weight = weight/np.min(weight)
+	#weight: [3, 1.5, 1]
+
+	# cross entropy 결과에 이 값들 곱해주면 됨. (부족한 데이터에 gradient 증폭)
+	cost_weight = [weight[i] for i in target]
+	#cost_weight: [1.5, 1, 1.5, 3, 1, 1]
+	return np.asarray(cost_weight, np.float32)
 
 def train(model, dataset):
 	loss = 0
@@ -52,13 +71,15 @@ def train(model, dataset):
 	for i in tqdm(range( int(np.ceil(total_data_length/batch_size)) ), ncols=50):
 		batch_source = source[batch_size * i: batch_size * (i + 1)] # [N, maximum_source_length]
 		batch_target = target[batch_size * i: batch_size * (i + 1)] # [N]
+		cost_weight = cost_weight_for_imbalanced_label(batch_target)
 	
 		train_loss, _, correct = sess.run([model.cost, model.minimize, model.correct_check],
 				{
 					model.idx_input:batch_source, 
 					model.target:batch_target, 
 					model.keep_prob:0.5,
-					model.weight_scale:1
+					model.weight_scale:1,
+					model.cost_weight:cost_weight
 				}
 			)
 		acc += correct
@@ -77,14 +98,15 @@ def valid(model, dataset):
 	for i in tqdm(range( int(np.ceil(total_data_length/batch_size)) ), ncols=50):
 		batch_source = source[batch_size * i: batch_size * (i + 1)] # [N, maximum_source_length]
 		batch_target = target[batch_size * i: batch_size * (i + 1)] # [N]
+		cost_weight = cost_weight_for_imbalanced_label(batch_target)
 	
 		valid_loss = sess.run(model.cost,
 				{
 					model.idx_input:batch_source, 
 					model.target:batch_target, 
 					model.keep_prob:1,
-					model.weight_scale:0.5 # train drop_out rate
-
+					model.weight_scale:0.5, # train drop_out rate
+					model.cost_weight:cost_weight
 				}
 			)
 		loss += valid_loss

@@ -6,12 +6,17 @@ def _split_sentence_score(data):
 	split_data = data.split(',')
 	score = float(split_data[0])
 	sentence = ','.join(split_data[1:])
+	sentence = sentence.replace('"', '')
+	sentence = sentence.replace(' -- ', ' ')
+	sentence = sentence.replace('-', ' ')
+	sentence = sentence.replace('\\/', ' ')
+	sentence = sentence.lower()
 	sentence = sentence.split()	
 	return sentence, score
 
 def _get_voca_and_max_length(path_list):
-	word2idx = {'</p>':0, '</unk>':1}
-	dict_value = 2
+	word2idx = {'</p>':0, '</unk>':1, '</e>':2}
+	dict_value = len(word2idx)
 	max_length = 0
 
 	for path in path_list:
@@ -31,6 +36,9 @@ def _get_voca_and_max_length(path_list):
 					if word not in word2idx:
 						word2idx[word] = dict_value
 						dict_value += 1
+
+	print('voca_size:', len(word2idx))
+	print('max_length:', max_length)
 	return word2idx, max_length
 
 
@@ -48,6 +56,7 @@ def _sentence2idx(sentence, word2idx, max_length):
 			idx.append(word2idx[word])
 		else:
 			idx.append(word2idx['</unk>'])
+	idx.append(word2idx['</e>'])
 	idx = np.pad(idx, (0, max_length-len(idx)), 'constant', constant_values=word2idx['</p>'])
 	return idx
 
@@ -59,6 +68,7 @@ def _get_dataset(data_path, word2idx, max_length, is_SST1):
 		'test':{'source':[], 'target':[]}
 	}
 
+	count = {}
 	for mode in data_path:
 		for path in data_path[mode]:		
 			with open(path, 'r', encoding='utf-8') as f:
@@ -86,9 +96,17 @@ def _get_dataset(data_path, word2idx, max_length, is_SST1):
 							word2idx, 
 							max_length
 						)
+
+					if mode == 'train':
+						if label in count:
+							count[label] += 1
+						else:
+							count[label] = 1
 					dataset[mode]['source'].append(idx)
 					dataset[mode]['target'].append(label)		
-
+	for i in count:
+		print('label:',i, 'num:', count[i])
+	print()	
 	print('data result')
 	for mode in dataset:
 		for key in dataset[mode]:

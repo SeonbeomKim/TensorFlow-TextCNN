@@ -21,7 +21,7 @@ class TextCNN:
 			self.target = tf.placeholder(tf.int32, [None], name="target")
 			self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 			self.weight_scale = tf.placeholder(tf.float32, name="weight_scale")
-
+			self.cost_weight = tf.placeholder(tf.float32, [None], name="cost_weight")
 
 		with tf.name_scope("embedding_table"):
 			if self.embedding_mode == 'rand':
@@ -59,20 +59,30 @@ class TextCNN:
 
 		with tf.name_scope('train'): 
 			target_one_hot = tf.one_hot(
-						self.target, # [N]
-						depth=self.num_classes,
-						on_value = 1., # tf.float32
-						off_value = 0., # tf.float32
-					) # [N, self.num_classes]
+					self.target, # [N]
+					depth=self.num_classes,
+					on_value = 1., # tf.float32
+					off_value = 0., # tf.float32
+				) # [N, self.num_classes]
 			# calc train_cost
+			'''
 			self.cost = tf.reduce_mean(
 						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
 					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
+			'''
+			self.cost = tf.nn.softmax_cross_entropy_with_logits(
+					labels = target_one_hot, 
+					logits = self.pred
+				) # [N]
+			self.cost = tf.reduce_mean(self.cost_weight * self.cost)
+				
+
 			s = 3.0
 			l2_cost_scale = 0.01 
 			self.l2_cost = l2_cost_scale * ((l2_loss - 3.0)**2) # l2_loss를 3으로 고정시킴. 
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			self.minimize = optimizer.minimize(self.cost + self.l2_cost)
+			self.minimize = optimizer.minimize(self.cost)
+			#self.minimize = optimizer.minimize(self.cost + self.l2_cost)
 			
 			'''
 			clip_norm = 3.0
@@ -104,13 +114,13 @@ class TextCNN:
 		convolved_features = []
 		for i in range(len(window_size)):
 			convolved = tf.layers.conv2d(
-						inputs = embedding, 
-						filters = filters[i], 
-						kernel_size = [window_size[i], embedding_size], 
-						strides=[1, 1], 
-						padding='VALID', 
-						activation=tf.nn.relu
-					) # [N, ?, 1, filters]
+					inputs = embedding, 
+					filters = filters[i], 
+					kernel_size = [window_size[i], embedding_size], 
+					strides=[1, 1], 
+					padding='VALID', 
+					activation=tf.nn.relu
+				) # [N, ?, 1, filters]
 			convolved_features.append(convolved) # [N, ?, 1, filters] 이 len(window_size) 만큼 존재.
 		return convolved_features
 
@@ -121,22 +131,22 @@ class TextCNN:
 		for index, convolved in enumerate(convolved_features): # [N, ?, 1, self.filters]
 			max_pool = tf.layers.max_pooling2d(
 	  				  	convolved,
-					    [60-self.window_size[index]+1, 1],
+					    [62-self.window_size[index]+1, 1],
 					    [1, 1]
 					) # [N, 1, 1, self.filters]
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features	
-   		'''
+		'''
 		pooled_features = []
 		for convolved in convolved_features: # [N, ?, 1, self.filters]
 			max_pool = tf.reduce_max(
-	  				  	input_tensor = convolved,
-					    axis = 1,
-					    keep_dims = True
-					) # [N, 1, 1, self.filters]
+  					input_tensor = convolved,
+					axis = 1,
+					keep_dims = True
+				) # [N, 1, 1, self.filters]
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features
-
+		
 	def concat_and_flatten(self, pooled_features):
 		concat = tf.concat(pooled_features, axis=-1) # [N, 1, 1, self.filters*len(self.window_size)]
 		#concat_and_flatten_features = tf.layers.flatten(concat) # [N, self.filters*len(self.window_size)]
