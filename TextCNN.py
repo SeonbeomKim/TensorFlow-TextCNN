@@ -54,7 +54,7 @@ class TextCNN:
 			self.convolved_features = self.convolution(self.embedding, self.embedding_size, self.window_size, self.filters)
 			self.pooled_features = self.max_pooling(self.convolved_features)
 			self.concat_and_flatten_features = self.concat_and_flatten(self.pooled_features)
-			self.pred, l2_loss = self.dropout_and_dense(self.concat_and_flatten_features, self.num_classes, self.keep_prob)
+			self.pred, self.w_l2 = self.dropout_and_dense(self.concat_and_flatten_features, self.num_classes, self.keep_prob)
 
 
 		with tf.name_scope('train'): 
@@ -78,11 +78,11 @@ class TextCNN:
 				
 
 			s = 3.0
-			l2_cost_scale = 0.01 
-			self.l2_cost = l2_cost_scale * ((l2_loss - 3.0)**2) # l2_loss를 3으로 고정시킴. 
+			l2_cost_scale = 0.001 
+			self.l2_cost = ((self.w_l2 - s)**2) # l2_loss를 3으로 고정시킴. 
 			optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			self.minimize = optimizer.minimize(self.cost)
-			#self.minimize = optimizer.minimize(self.cost + self.l2_cost)
+			#self.minimize = optimizer.minimize(self.cost)
+			self.minimize = optimizer.minimize(self.cost + l2_cost_scale * self.l2_cost)
 			
 			'''
 			clip_norm = 3.0
@@ -163,7 +163,7 @@ class TextCNN:
 		bias = tf.Variable(tf.constant(0.0, shape = [num_classes]))
 		
 		dense = tf.matmul(dropout, self.weight_scale*W) + bias
-		l2_loss = tf.nn.l2_loss(W)
+		w_l2 = tf.sqrt( tf.reduce_sum(tf.square(W)) )
 		#dense = tf.nn.relu(tf.matmul(dropout, self.weight_scale*W) + bias)
 		#dense = tf.layers.dense(dropout, units = num_classes, activation=None)
-		return dense, l2_loss
+		return dense, w_l2

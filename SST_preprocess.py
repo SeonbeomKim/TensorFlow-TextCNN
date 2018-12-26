@@ -10,7 +10,7 @@ def _split_sentence_score(data):
 	sentence = sentence.replace(' -- ', ' ')
 	sentence = sentence.replace('-', ' ')
 	sentence = sentence.replace('\\/', ' ')
-	sentence = sentence.lower()
+	#sentence = sentence.lower()
 	sentence = sentence.split()	
 	return sentence, score
 

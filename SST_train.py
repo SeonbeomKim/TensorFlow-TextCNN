@@ -30,7 +30,7 @@ window_size = [3, 4, 5]
 filters = [100, 100, 100] 
 num_classes = data_type_dict[data_type][1]
 pad_idx = word2idx['</p>']
-lr = 0.001 * 10
+lr = 0.005
 voca_size = len(word2idx)
 embedding_size = 300
 embedding_mode = 'rand'
@@ -56,6 +56,7 @@ def cost_weight_for_imbalanced_label(target):
 	cost_weight = [weight[i] for i in target]
 	#cost_weight: [1.5, 1, 1.5, 3, 1, 1]
 	return np.asarray(cost_weight, np.float32)
+
 
 def train(model, dataset):
 	loss = 0
@@ -156,7 +157,8 @@ def run(model, dataset):
 		train_loss = train(model, trainset)
 		valid_loss = valid(model, validset)
 		test_accuracy = test(model, testset)
-		print("epoch:", epoch, 'train_loss:', train_loss, 'valid_loss:', valid_loss, 'test_accuracy:', test_accuracy, '\n')
+		w_l2 = sess.run(model.w_l2)
+		print("epoch:", epoch, 'train_loss:', train_loss, 'valid_loss:', valid_loss, 'test_accuracy:', test_accuracy, 'w_l2:', w_l2,'\n')
 		
 		# tensorboard
 		summary = sess.run(merged, {
