@@ -13,7 +13,7 @@ path_list = [
 	]
 
 data_type_dict = {'SST1':(True, 5), 'SST2':(False, 2)}
-data_type = ['SST1', 'SST2'][0]
+data_type = ['SST1', 'SST2'][1]
 print(data_type)
 
 dataset, word2idx, maximum_length = pr.get_dataset(
@@ -30,7 +30,8 @@ window_size = [3, 4, 5]
 filters = [100, 100, 100] 
 num_classes = data_type_dict[data_type][1]
 pad_idx = word2idx['</p>']
-lr = 0.005
+lr = 0.0001 
+print('lr:', lr) 
 voca_size = len(word2idx)
 embedding_size = 300
 embedding_mode = 'rand'

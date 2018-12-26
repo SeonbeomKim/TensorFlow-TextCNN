@@ -14,7 +14,7 @@ def _split_sentence_score(data):
 	sentence = sentence.split()	
 	return sentence, score
 
-def _get_voca_and_max_length(path_list):
+def _get_voca_and_max_length(path_list, is_SST1):
 	word2idx = {'</p>':0, '</unk>':1, '</e>':2}
 	dict_value = len(word2idx)
 	max_length = 0
@@ -28,8 +28,14 @@ def _get_voca_and_max_length(path_list):
 				# 뉴라인 제거
 				if data[-1] == '\n':
 					data = data[:-1]
-				
-				sentence, _ = _split_sentence_score(data)
+
+				sentence, score = _split_sentence_score(data)
+				label = _get_label(score)
+
+				if is_SST1 is False:
+					if label == 2: #중립
+						continue
+					
 				max_length = max(max_length, len(sentence))
 
 				for word in sentence:
@@ -130,7 +136,7 @@ def get_dataset(path_list, is_phrase_tarin=True, is_SST1=True, max_length_margin
 			'test':test_path
 		}
 
-	word2idx, max_length = _get_voca_and_max_length(train_path)
+	word2idx, max_length = _get_voca_and_max_length(train_path, is_SST1)
 	dataset = _get_dataset(data_path, word2idx, max_length+max_length_margin, is_SST1)
 	return dataset, word2idx, max_length
 

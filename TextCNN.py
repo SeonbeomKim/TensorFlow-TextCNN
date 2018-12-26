@@ -65,34 +65,20 @@ class TextCNN:
 					off_value = 0., # tf.float32
 				) # [N, self.num_classes]
 			# calc train_cost
-			'''
-			self.cost = tf.reduce_mean(
-						tf.nn.softmax_cross_entropy_with_logits(labels = target_one_hot, logits = self.pred)
-					) # softmax_cross_entropy_with_logits: [N] => reduce_mean: scalar
-			'''
 			self.cost = tf.nn.softmax_cross_entropy_with_logits(
 					labels = target_one_hot, 
 					logits = self.pred
 				) # [N]
 			self.cost = tf.reduce_mean(self.cost_weight * self.cost)
 				
-
 			s = 3.0
-			l2_cost_scale = 0.001 
-			self.l2_cost = ((self.w_l2 - s)**2) # l2_loss를 3으로 고정시킴. 
-			optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			#self.minimize = optimizer.minimize(self.cost)
+			l2_cost_scale = 0.1 
+			self.l2_cost = ((self.w_l2 - s)**2)/2 # l2_loss를 3으로 고정시킴. 
+			#optimizer = tf.train.AdadeltaOptimizer(self.lr)
+			optimizer = tf.train.AdamOptimizer(self.lr)
 			self.minimize = optimizer.minimize(self.cost + l2_cost_scale * self.l2_cost)
 			
-			'''
-			clip_norm = 3.0
-			optimizer = tf.train.AdadeltaOptimizer(self.lr)
-			grads_and_vars = optimizer.compute_gradients(self.cost)
-			#https://www.tensorflow.org/api_docs/python/tf/clip_by_norm
-			clip_grads_and_vars = [(tf.clip_by_norm(gv[0], clip_norm), gv[1]) for gv in grads_and_vars]
-			self.minimize = optimizer.apply_gradients(clip_grads_and_vars)
-			'''
-
+			
 		with tf.name_scope('metric'):
 			self.pred_argmax = tf.argmax(self.pred, 1, output_type=tf.int32) # [N]	
 			self.correct_check_beform_sum = tf.equal( self.pred_argmax, self.target )
@@ -125,18 +111,7 @@ class TextCNN:
 		return convolved_features
 
 
-	def max_pooling(self, convolved_features):
-		'''
-		pooled_features = []
-		for index, convolved in enumerate(convolved_features): # [N, ?, 1, self.filters]
-			max_pool = tf.layers.max_pooling2d(
-	  				  	convolved,
-					    [62-self.window_size[index]+1, 1],
-					    [1, 1]
-					) # [N, 1, 1, self.filters]
-			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
-		return pooled_features	
-		'''
+	def max_pooling(self, convolved_features):		
 		pooled_features = []
 		for convolved in convolved_features: # [N, ?, 1, self.filters]
 			max_pool = tf.reduce_max(
@@ -147,23 +122,18 @@ class TextCNN:
 			pooled_features.append(max_pool) # [N, 1, 1, self.filters] 이 len(window_size) 만큼 존재.
 		return pooled_features
 		
+
 	def concat_and_flatten(self, pooled_features):
-		concat = tf.concat(pooled_features, axis=-1) # [N, 1, 1, self.filters*len(self.window_size)]
-		#concat_and_flatten_features = tf.layers.flatten(concat) # [N, self.filters*len(self.window_size)]
-		concat_and_flatten_features = tf.reshape(concat, [-1, np.sum(self.filters)]) # [N, self.filters*len(self.window_size)]
-		
-		#print(concat_and_flatten_features)
+		concat = tf.concat(pooled_features, axis=-1) # [N, 1, 1, np.sum(self.filters)]
+		concat_and_flatten_features = tf.reshape(concat, [-1, np.sum(self.filters)]) # [N, np.sum(self.filters)]
 		return concat_and_flatten_features
 
 
 	def dropout_and_dense(self, concat_and_flatten_features, num_classes, keep_prob):
 		dropout = tf.nn.dropout(concat_and_flatten_features, keep_prob = keep_prob)
-		#dropout = tf.contrib.layers.layer_norm(dropout,	begin_norm_axis=1)
 		W = tf.get_variable('w2', shape = [np.sum(self.filters), num_classes], initializer=tf.contrib.layers.xavier_initializer())
 		bias = tf.Variable(tf.constant(0.0, shape = [num_classes]))
 		
 		dense = tf.matmul(dropout, self.weight_scale*W) + bias
 		w_l2 = tf.sqrt( tf.reduce_sum(tf.square(W)) )
-		#dense = tf.nn.relu(tf.matmul(dropout, self.weight_scale*W) + bias)
-		#dense = tf.layers.dense(dropout, units = num_classes, activation=None)
 		return dense, w_l2
