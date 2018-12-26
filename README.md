@@ -1,6 +1,8 @@
 # TensorFlow-TextCNN
 TextCNN (Convolutional Neural Networks for Sentence Classification - Yoon Kim)
 
+## paper
+   * https://arxiv.org/abs/1408.5882
 
 ## dataset
    * SST(Stanford Sentiment Treebank)
